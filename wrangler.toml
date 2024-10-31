@@ -1,0 +1,27 @@
+name = "bifroest-engity-org"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+account_id = "49a3fd03e42d8cc1552789fdb2414e8e"
+
+kv_namespaces = [
+   { binding = "KV", id = "0072058f060e4cf5820e0c05c25abe99", preview_id = "b71bee0984334988b2011d6c4033d32d" }
+]
+
+routes = [
+   { pattern = "bifroest.engity.org", custom_domain = true }
+]
+
+[vars]
+GITHUB_ACCESS_USER = "engity-bot"
+GITHUB_ORGANIZATION = "engity-com"
+GITHUB_REPOSITORY = "bifroest"
+
+[placement]
+mode = "smart"
+
+[triggers]
+crons = [ "0/10 * * * *" ]
+
+[observability]
+enabled = true
