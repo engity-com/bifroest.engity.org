@@ -1,0 +1,53 @@
+name: CI
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  push:
+    branches:
+      - main
+
+jobs:
+    test:
+        name: Test
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: package.json
+                  cache: 'npm'
+
+            - name: Install
+              run: npm ci --no-fund
+
+            - name: Tests
+              run: npm run test
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Build
+              run: npm run build
+
+    deploy:
+        needs:
+            - test
+        name: Deploy
+        if: github.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest
+        environment: production
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Deploy
+              uses: cloudflare/wrangler-action@v3
+              with:
+                  apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

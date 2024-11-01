@@ -1,0 +1,8 @@
+/var
+/.cache
+/dist
+/node_modules
+/.dev.vars
+/.wrangler
+/public
+/.idea
