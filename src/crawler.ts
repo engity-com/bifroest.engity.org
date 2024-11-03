@@ -1,16 +1,15 @@
 import { Octokit } from '@octokit/rest';
 import { SemVer } from 'semver';
 import { Environment } from './common';
-import { PageHandler } from './handler_page';
+
+export type ContentConsumer = (env: Environment, path: string, version: SemVer) => Promise<void>;
 
 export class Crawler {
-   public constructor(private pageHandler: PageHandler) {}
-
-   public async crawlAndPreCache(env: Environment, version: SemVer): Promise<void> {
+   public async crawl(env: Environment, version: SemVer, onEach: ContentConsumer): Promise<void> {
       const octokit = new Octokit({
          auth: env.GITHUB_ACCESS_TOKEN,
       });
-      console.log(`Pre caching of ${version}...`);
+      console.debug(`Crawling of ${version}...`);
       for await (const response of octokit.paginate.iterator('GET /repos/{owner}/{repo}/git/trees/docs/v{version}?recursive=1', {
          owner: env.GITHUB_ORGANIZATION,
          repo: env.GITHUB_REPOSITORY,
@@ -31,9 +30,9 @@ export class Crawler {
                continue;
             }
 
-            await this.pageHandler.handle(undefined, env, `/${path}`, version);
+            await onEach(env, '/' + path, version);
          }
       }
-      console.log(`Pre caching of ${version}... DONE!`);
+      console.log(`Crawling of ${version}... DONE!`);
    }
 }

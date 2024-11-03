@@ -46,7 +46,7 @@ export class Releases {
       return all && all.indexOf(typeof version === 'string' ? version : version.toString()) >= 0;
    }
 
-   public async update(env: Environment) {
+   public async update(env: Environment): Promise<SemVer> {
       const octokit = new Octokit({
          auth: env.GITHUB_ACCESS_TOKEN,
       });
@@ -91,6 +91,8 @@ export class Releases {
          .reverse();
 
       await env.KV.put('releases-sorted', JSON.stringify(allSorted), cacheKvSettings);
+
+      return latest;
    }
 
    private _toSemver(plain: string | null | undefined): SemVer {

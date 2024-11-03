@@ -21,7 +21,7 @@ GITHUB_REPOSITORY = "bifroest"
 mode = "smart"
 
 [triggers]
-crons = [ "0/10 * * * *" ]
+crons = [ "0 * * * *" ]
 
 [observability]
 enabled = true

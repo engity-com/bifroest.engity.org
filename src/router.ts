@@ -1,6 +1,8 @@
 import { SemVer } from 'semver';
 import semver from 'semver/preload';
 import { Environment } from './common';
+import { Contents } from './contents';
+import { Versions } from './versions';
 
 interface Rule {
    regexp: RegExp;
@@ -31,19 +33,18 @@ export class Router {
       },
    ];
 
-   public onDefault: (request: Request, env: Environment, path: string, versionOrPr?: SemVer | number) => Promise<Response> = async (request, env, path, version) => {
-      console.log(`fallback.onDefault(url="${request.url}", path="${path}", versionOrPr: "${version}")`);
-      return await this.onNotFound(request, env);
-   };
+   public constructor(
+      private readonly contents: Contents,
+      private readonly versions: Versions
+   ) {}
 
-   public onVersions: (request: Request, env: Environment) => Promise<Response> = async (request, env) => {
-      console.log(`fallback.onVersions(url="${request.url}")`);
-      return await this.onNotFound(request, env);
-   };
+   private async onDefault(request: Request, env: Environment, path: string, versionOrPr?: SemVer | number) {
+      return await this.contents.serve(request, env, this, path, versionOrPr);
+   }
 
-   public onNotFound: (request: Request, env: Environment) => Promise<Response> = async (request) => {
-      return await this.respondWithError(request, 404, 'Not found', 'The resource you requested cannot be found.');
-   };
+   private async onVersions(request: Request, env: Environment) {
+      return await this.versions.serve(request, env);
+   }
 
    public async handle(request: Request, env: Environment): Promise<Response> {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -83,7 +84,7 @@ export class Router {
       return Response.redirect(url.toString(), status);
    }
 
-   public async respondWithError(_: Request, statusCode: number, status: string, message: string, headers: HeadersInit = {}) {
+   public async respondWithError(_: Request, statusCode: number, status: string | undefined, message: string, headers: HeadersInit = {}) {
       const targetHeaders = new Headers(headers);
       targetHeaders.append(`X-Error-Details`, message);
       return new Response(null, {
