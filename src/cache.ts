@@ -9,7 +9,6 @@ export class Cache {
       const targetUrl = new URL(request.url);
 
       const fetchRequest = new Request(targetUrl, {
-         ...request,
          method: 'GET',
       });
 
