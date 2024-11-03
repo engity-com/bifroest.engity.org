@@ -14,12 +14,16 @@ export class Router {
          handler: async (request, env) => await this.onVersions(request, env),
       },
       {
-         regexp: /^\/(v\d\.\d\.\d[^/]*)(|\/.*)$/,
+         regexp: /^\/(v\d+\.\d+\.\d+[^/]*)(|\/.*)$/,
          handler: async (request, env, match) => await this._onVersioned(request, env, match[1], match[2]),
       },
       {
          regexp: /^\/pr-(\d+)(|\/.*)$/,
          handler: async (request, env, match) => await this._onPr(request, env, parseInt(match[1]), match[2]),
+      },
+      {
+         regexp: /^\/(\d+\.\d+\.\d+)(|\/.*)$/,
+         handler: async (request, env, match) => await this.redirect(request, `v${match[1]}${match[2]}`, 301),
       },
       {
          regexp: /^\/latest(|\/.*)$/,
