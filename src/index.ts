@@ -1,11 +1,11 @@
-import { App } from './app';
+import { App, AppCachingStrategy } from './app';
 import { Environment } from './common';
 
 const app = new App();
 
 export const handler = {
-   async fetch(request: Request, env: Environment, ctx: ExecutionContext): Promise<Response> {
-      return await app.fetch(request, env, ctx);
+   async fetch(request: Request, env: Environment, ctx: ExecutionContext, cachingStrategy: AppCachingStrategy = AppCachingStrategy.automatic): Promise<Response> {
+      return await app.fetch(request, env, ctx, cachingStrategy);
    },
 
    async scheduled(scheduledController: ScheduledController, env: Environment, ctx: ExecutionContext): Promise<void> {
