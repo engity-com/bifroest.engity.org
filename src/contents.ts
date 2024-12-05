@@ -1,4 +1,5 @@
 import * as mime from 'mime-types';
+// @ts-ignore
 import { basename } from 'path';
 import { SemVer } from 'semver';
 import { applyDefaultHeaders, Environment, oneHourInSeconds, oneMinuteInSeconds, oneYearInSeconds } from './common';

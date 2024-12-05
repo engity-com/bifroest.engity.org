@@ -1,4 +1,4 @@
-import { KVNamespace } from '@cloudflare/workers-types';
+import { fetch, KVNamespace } from '@cloudflare/workers-types';
 
 export interface Environment {
    GITHUB_ACCESS_USER: string;
@@ -6,6 +6,9 @@ export interface Environment {
    GITHUB_ORGANIZATION: string;
    GITHUB_REPOSITORY: string;
    KV: KVNamespace;
+   ASSETS: {
+      fetch: typeof fetch;
+   };
 }
 
 export const applyDefaultHeaders = (target: Response) => {

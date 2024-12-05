@@ -37,6 +37,11 @@ const testEnvironment: Environment = {
    GITHUB_ORGANIZATION: 'testGithubOrganization',
    GITHUB_REPOSITORY: 'testGithubRepository',
    KV: testKv,
+   ASSETS: {
+      fetch() {
+         throw `Not implemented!`;
+      },
+   },
 };
 
 test('GET /', async () => {

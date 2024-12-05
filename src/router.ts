@@ -12,8 +12,16 @@ interface Rule {
 export class Router {
    private readonly _rules: Array<Rule> = [
       {
-         regexp: /^\/versions.json$/,
+         regexp: /^\/versions\.json$/,
          handler: async (request, env) => await this.onVersions(request, env),
+      },
+      {
+         regexp: /^\/(?:robots\.txt|favicon\.ico)$/,
+         handler: async (request, env) => await this.serveAsset(request, env),
+      },
+      {
+         regexp: /^\/v\d+\.\d+\.\d+[^/]*\/sitemap\.xml(|\.gz)$/,
+         handler: async (request, env, match) => await this.redirect(request, `sitemap.xml${match[1]}`, 301),
       },
       {
          regexp: /^\/(v\d+\.\d+\.\d+[^/]*)(|\/.*)$/,
@@ -82,6 +90,10 @@ export class Router {
       const url = new URL(request.url);
       url.pathname = newPath;
       return Response.redirect(url.toString(), status);
+   }
+
+   public async serveAsset(request: Request, env: Environment): Promise<Response> {
+      return env.ASSETS.fetch(request);
    }
 
    public async respondWithError(_: Request, statusCode: number, status: string | undefined, message: string, headers: HeadersInit = {}) {

@@ -12,6 +12,10 @@ routes = [
    { pattern = "bifroest.engity.org", custom_domain = true }
 ]
 
+[assets]
+directory = "static"
+html_handling = "none"
+
 [vars]
 GITHUB_ACCESS_USER = "engity-bot"
 GITHUB_ORGANIZATION = "engity-com"
