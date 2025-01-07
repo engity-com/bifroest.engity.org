@@ -29,6 +29,7 @@ const testCtx: ExecutionContext = {
    waitUntil(): void {
       throw `Not implemented!`;
    },
+   props: undefined,
 };
 
 const testEnvironment: Environment = {
