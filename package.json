@@ -20,7 +20,7 @@
       "@octokit/plugin-paginate-rest": "^11.4.0",
       "@octokit/rest": "^21.0.2",
       "mime-types": "^2.1.35",
-      "octokit": "^4.0.2",
+      "octokit": "^4.1.0",
       "semver": "^7.6.3",
       "yaml": "^2.7.0"
    },
