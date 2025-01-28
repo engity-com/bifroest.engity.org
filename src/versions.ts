@@ -1,3 +1,4 @@
+import { sort } from 'semver';
 import { Environment, oneMinuteInSeconds } from './common';
 import { Releases } from './releases';
 
@@ -9,7 +10,7 @@ export class Versions {
    public async serve(_: Request | undefined, env: Environment): Promise<Response> {
       const latest = await this.releases.latest(env);
       const latestName = latest.toString();
-      const all = await this.releases.all(env);
+      const all = sort(await this.releases.all(env)).reverse();
 
       const payload = all.map((v) => {
          const name = v.toString();
