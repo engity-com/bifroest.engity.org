@@ -37,7 +37,7 @@
       "eslint": "^9.33.0",
       "jest": "^30.0.5",
       "jest-environment-miniflare": "^2.14.4",
-      "miniflare": "^4.20250803.0",
+      "miniflare": "^4.20250816.1",
       "npm-check-updates": "^18.0.2",
       "prettier": "^3.6.2",
       "ts-jest": "^29.4.1",
