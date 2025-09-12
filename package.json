@@ -38,7 +38,7 @@
       "jest": "^30.0.5",
       "jest-environment-miniflare": "^2.14.4",
       "miniflare": "^4.20250816.1",
-      "npm-check-updates": "^18.0.2",
+      "npm-check-updates": "^18.1.0",
       "prettier": "^3.6.2",
       "ts-jest": "^29.4.1",
       "typescript": "^5.9.2",
