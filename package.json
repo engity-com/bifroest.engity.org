@@ -18,7 +18,7 @@
       "@cloudflare/kv-asset-handler": "^0.4.0",
       "@octokit/core": "^7.0.6",
       "@octokit/plugin-paginate-rest": "^14.0.0",
-      "@octokit/rest": "^22.0.0",
+      "@octokit/rest": "^22.0.1",
       "mime-types": "^3.0.1",
       "octokit": "^5.0.5",
       "semver": "^7.7.3",
