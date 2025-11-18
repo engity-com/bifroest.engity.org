@@ -31,7 +31,7 @@
       "@types/mime-types": "^3.0.1",
       "@types/node": "^24.10.0",
       "@types/semver": "^7.7.1",
-      "@typescript-eslint/eslint-plugin": "^8.46.2",
+      "@typescript-eslint/eslint-plugin": "^8.47.0",
       "@typescript-eslint/parser": "^8.47.0",
       "better-sqlite3": "^12.4.1",
       "eslint": "^9.39.1",
