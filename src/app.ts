@@ -1,6 +1,6 @@
-import { ExecutionContext, ExportedHandler } from '@cloudflare/workers-types';
+import type { ExecutionContext, ExportedHandler } from '@cloudflare/workers-types';
 import { Cache } from './cache';
-import { Environment } from './common';
+import type { Environment } from './common';
 import { Contents } from './contents';
 import { Crawler } from './crawler';
 import { Releases } from './releases';
@@ -21,13 +21,23 @@ export class App implements ExportedHandler<Environment> {
    private readonly router = new Router(this.contents, this.versions);
    private readonly crawler = new Crawler();
 
-   public async fetch(request: Request, env: Environment, ctx: ExecutionContext, cachingStrategy: AppCachingStrategy = AppCachingStrategy.automatic): Promise<Response> {
+   public async fetch(
+      request: Request,
+      env: Environment,
+      ctx: ExecutionContext,
+      cachingStrategy: AppCachingStrategy = AppCachingStrategy.automatic,
+   ): Promise<Response> {
       switch (request.method) {
          case 'GET':
          case 'HEAD':
             break;
          default:
-            return await this.router.respondWithError(request, 405, 'Method not allowed.', `Method passThroughOnException${request.method} is not allowed.`);
+            return await this.router.respondWithError(
+               request,
+               405,
+               'Method not allowed.',
+               `Method passThroughOnException${request.method} is not allowed.`,
+            );
       }
       return await this.fetchInternal(request, env, ctx, cachingStrategy);
    }
@@ -36,11 +46,22 @@ export class App implements ExportedHandler<Environment> {
       await this.preCache(env, ctx);
    }
 
-   private async fetchInternal(request: Request, env: Environment, ctx: ExecutionContext, cachingStrategy: AppCachingStrategy = AppCachingStrategy.automatic): Promise<Response> {
+   private async fetchInternal(
+      request: Request,
+      env: Environment,
+      ctx: ExecutionContext,
+      cachingStrategy: AppCachingStrategy = AppCachingStrategy.automatic,
+   ): Promise<Response> {
       switch (cachingStrategy) {
          case AppCachingStrategy.automatic:
          case AppCachingStrategy.refreshAlways:
-            return await this.cache.handle(request, env, ctx, (request, env) => this.router.handle(request, env), cachingStrategy === AppCachingStrategy.refreshAlways);
+            return await this.cache.handle(
+               request,
+               env,
+               ctx,
+               (request, env) => this.router.handle(request, env),
+               cachingStrategy === AppCachingStrategy.refreshAlways,
+            );
          case AppCachingStrategy.byPass:
             return await this.router.handle(request, env);
          default:

@@ -1,10 +1,16 @@
-import { Cache as WCache, ExecutionContext } from '@cloudflare/workers-types';
-import { Environment } from './common';
+import type { ExecutionContext, Cache as WCache } from '@cloudflare/workers-types';
+import type { Environment } from './common';
 
 export type CacheDrain = (request: Request, env: Environment) => Promise<Response>;
 
 export class Cache {
-   async handle(request: Request, env: Environment, ctx: ExecutionContext, drain: CacheDrain, force?: boolean): Promise<Response> {
+   async handle(
+      request: Request,
+      env: Environment,
+      ctx: ExecutionContext,
+      drain: CacheDrain,
+      force?: boolean,
+   ): Promise<Response> {
       const cache = await this.cache();
       const targetUrl = new URL(request.url);
 
