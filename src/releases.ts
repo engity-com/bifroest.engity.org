@@ -1,7 +1,7 @@
 import { Octokit } from '@octokit/rest';
-import { SemVer } from 'semver';
+import type { SemVer } from 'semver';
 import semver from 'semver/preload';
-import { Environment, oneHourInSeconds } from './common';
+import { type Environment, oneHourInSeconds } from './common';
 
 const maxRetrieveTries = 25;
 const cacheKvSettings = {
@@ -25,7 +25,7 @@ export class Releases {
    }
 
    public async all(env: Environment): Promise<Array<SemVer>> {
-      return (await this._all(env)).map((v) => this._toSemver(v));
+      return (await this._all(env)).map(v => this._toSemver(v));
    }
 
    private async _all(env: Environment): Promise<Array<string>> {
@@ -50,7 +50,7 @@ export class Releases {
       const octokit = new Octokit({
          auth: env.GITHUB_ACCESS_TOKEN,
       });
-      let latest: SemVer | undefined = undefined;
+      let latest: SemVer | undefined;
       const all: Array<SemVer> = [];
       for await (const response of octokit.paginate.iterator('GET /repos/{owner}/{repo}/git/matching-refs/tags/docs', {
          owner: env.GITHUB_ORGANIZATION,
@@ -58,7 +58,7 @@ export class Releases {
          per_page: 100,
       })) {
          for (const v of response.data) {
-            // @ts-ignore
+            // @ts-expect-error
             const ref = v.ref as string;
             if (!ref.startsWith(docsRefPrefix)) {
                continue;
@@ -86,7 +86,7 @@ export class Releases {
       await env.KV.put('release-latest', latest.toString(), cacheKvSettings);
 
       const allSorted = all
-         .map((v) => v.toString())
+         .map(v => v.toString())
          .sort()
          .reverse();
 

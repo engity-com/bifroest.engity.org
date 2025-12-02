@@ -1,6 +1,7 @@
-import { ExecutionContext, KVNamespace } from '@cloudflare/workers-types';
+import type { ExecutionContext, KVNamespace } from '@cloudflare/workers-types';
+import { describe, expect, it } from 'vitest';
 import { AppCachingStrategy } from './app';
-import { Environment } from './common';
+import type { Environment } from './common';
 import { handler } from './index';
 
 const testKv: KVNamespace = {
@@ -16,8 +17,7 @@ const testKv: KVNamespace = {
    delete() {
       throw `Not implemented!`;
    },
-   // @ts-ignore
-   getWithMetadataetadata() {
+   getWithMetadata() {
       throw `Not implemented!`;
    },
 };
@@ -45,8 +45,17 @@ const testEnvironment: Environment = {
    },
 };
 
-test('GET /', async () => {
-   const result = await handler.fetch(new Request('http://falcon/latest/', { method: 'GET' }), testEnvironment, testCtx, AppCachingStrategy.byPass);
-   expect(result.status).toBe(301);
-   expect(result.headers.get('Location')).toBe('http://falcon/');
+describe('handler', () => {
+   describe('fetch()', () => {
+      it('should handle GET /latest/ and redirect to /', async () => {
+         const result = await handler.fetch(
+            new Request('http://falcon/latest/', { method: 'GET' }),
+            testEnvironment,
+            testCtx,
+            AppCachingStrategy.byPass,
+         );
+         expect(result.status).toBe(301);
+         expect(result.headers.get('Location')).toBe('http://falcon/');
+      });
+   });
 });

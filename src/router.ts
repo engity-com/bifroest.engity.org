@@ -1,8 +1,8 @@
-import { SemVer } from 'semver';
+import type { SemVer } from 'semver';
 import semver from 'semver/preload';
-import { Environment } from './common';
-import { Contents } from './contents';
-import { Versions } from './versions';
+import type { Environment } from './common';
+import type { Contents } from './contents';
+import type { Versions } from './versions';
 
 interface Rule {
    regexp: RegExp;
@@ -21,7 +21,7 @@ export class Router {
       },
       {
          regexp: /^\/v\d+\.\d+\.\d+[^/]*\/sitemap\.xml(|\.gz)$/,
-         handler: async (request, env, match) => await this.redirect(request, `sitemap.xml${match[1]}`, 301),
+         handler: async (request, _, match) => await this.redirect(request, `sitemap.xml${match[1]}`, 301),
       },
       {
          regexp: /^\/(v\d+\.\d+\.\d+[^/]*)(|\/.*)$/,
@@ -29,11 +29,11 @@ export class Router {
       },
       {
          regexp: /^\/pr-(\d+)(|\/.*)$/,
-         handler: async (request, env, match) => await this._onPr(request, env, parseInt(match[1]), match[2]),
+         handler: async (request, env, match) => await this._onPr(request, env, parseInt(match[1], 10), match[2]),
       },
       {
          regexp: /^\/(\d+\.\d+\.\d+)(|\/.*)$/,
-         handler: async (request, env, match) => await this.redirect(request, `v${match[1]}${match[2]}`, 301),
+         handler: async (request, _, match) => await this.redirect(request, `v${match[1]}${match[2]}`, 301),
       },
       {
          regexp: /^\/latest(|\/.*)$/,
@@ -43,7 +43,7 @@ export class Router {
 
    public constructor(
       private readonly contents: Contents,
-      private readonly versions: Versions
+      private readonly versions: Versions,
    ) {}
 
    private async onDefault(request: Request, env: Environment, path: string, versionOrPr?: SemVer | number) {
@@ -56,7 +56,12 @@ export class Router {
 
    public async handle(request: Request, env: Environment): Promise<Response> {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
-         return await this.respondWithError(request, 405, 'Method not allowed', `The request method ${request.method} is not allowed for this resource.`);
+         return await this.respondWithError(
+            request,
+            405,
+            'Method not allowed',
+            `The request method ${request.method} is not allowed for this resource.`,
+         );
       }
 
       const url = new URL(request.url);
@@ -72,7 +77,12 @@ export class Router {
       return await this.onDefault(request, env, pathname);
    }
 
-   private async _onVersioned(request: Request, env: Environment, rawVersion: string, restPath: string): Promise<Response> {
+   private async _onVersioned(
+      request: Request,
+      env: Environment,
+      rawVersion: string,
+      restPath: string,
+   ): Promise<Response> {
       const version = semver.coerce(rawVersion, { includePrerelease: true });
       if (!version) {
          const url = new URL(request.url);
@@ -96,7 +106,13 @@ export class Router {
       return env.ASSETS.fetch(request);
    }
 
-   public async respondWithError(_: Request, statusCode: number, status: string | undefined, message: string, headers: HeadersInit = {}) {
+   public async respondWithError(
+      _: Request,
+      statusCode: number,
+      status: string | undefined,
+      message: string,
+      headers: HeadersInit = {},
+   ) {
       const targetHeaders = new Headers(headers);
       targetHeaders.append(`X-Error-Details`, message);
       return new Response(null, {

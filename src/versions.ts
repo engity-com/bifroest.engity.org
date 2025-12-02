@@ -1,6 +1,6 @@
 import { sort } from 'semver';
-import { Environment, oneMinuteInSeconds } from './common';
-import { Releases } from './releases';
+import { type Environment, oneMinuteInSeconds } from './common';
+import type { Releases } from './releases';
 
 const ttl = oneMinuteInSeconds * 5;
 
@@ -12,7 +12,7 @@ export class Versions {
       const latestName = latest.toString();
       const all = sort(await this.releases.all(env)).reverse();
 
-      const payload = all.map((v) => {
+      const payload = all.map(v => {
          const name = v.toString();
          const isLatest = name === latestName;
          return {

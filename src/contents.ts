@@ -1,29 +1,46 @@
+import { basename } from 'node:path';
 import * as mime from 'mime-types';
-// @ts-ignore
-import { basename } from 'path';
 import { SemVer } from 'semver';
-import { applyDefaultHeaders, Environment, oneHourInSeconds, oneMinuteInSeconds, oneYearInSeconds } from './common';
-import { Releases } from './releases';
+import {
+   applyDefaultHeaders,
+   type Environment,
+   oneHourInSeconds,
+   oneMinuteInSeconds,
+   oneYearInSeconds,
+} from './common';
+import type { Releases } from './releases';
 
 const ttlPreReleases = oneMinuteInSeconds * 15;
 const ttlReleases = oneHourInSeconds * 12;
 const ttlUnique = oneYearInSeconds;
 const ttlNotFound = oneMinuteInSeconds * 5;
 
-const uniqueFilename = /^[a-zA-Z0-9]+\.[a-f0-9]{8,32}(?:\.min\.(?:js|css))$/;
+const uniqueFilename = /^[a-zA-Z0-9]+\.[a-f0-9]{8,32}\.min\.(?:js|css)$/;
 
 export interface FallbackHandler {
    redirect(request: Request, newPath: string, status: number): Promise<Response>;
-   respondWithError(request: Request, statusCode: number, status: string | undefined, message: string, headers?: HeadersInit): Promise<Response>;
+   respondWithError(
+      request: Request,
+      statusCode: number,
+      status: string | undefined,
+      message: string,
+      headers?: HeadersInit,
+   ): Promise<Response>;
 }
 
 export class Contents {
    public constructor(private releases: Releases) {}
 
-   public async serve(request: Request, env: Environment, fallback: FallbackHandler, path: string, versionOrPr?: SemVer | number): Promise<Response> {
+   public async serve(
+      request: Request,
+      env: Environment,
+      fallback: FallbackHandler,
+      path: string,
+      versionOrPr?: SemVer | number,
+   ): Promise<Response> {
       const latest = await this.releases.latest(env);
 
-      if (request && versionOrPr && versionOrPr == latest) {
+      if (request && versionOrPr && versionOrPr === latest) {
          return await fallback.redirect(request, path, 307);
       }
       if (!versionOrPr) {
@@ -31,7 +48,8 @@ export class Contents {
       }
 
       const url = this._urlFor(env, path, versionOrPr);
-      const preRelease = typeof versionOrPr === 'number' || (versionOrPr?.prerelease && versionOrPr.prerelease.length > 0);
+      const preRelease =
+         typeof versionOrPr === 'number' || (versionOrPr?.prerelease && versionOrPr.prerelease.length > 0);
       let filename = basename(url.pathname);
       const ttl = () => {
          if (uniqueFilename.exec(filename)) {
@@ -59,7 +77,7 @@ export class Contents {
          });
          if (alternativeResponse.status < 400) {
             if (request && !path.endsWith('/')) {
-               let targetPath = path + '/';
+               let targetPath = `${path}/`;
                if (typeof versionOrPr === 'number') {
                   targetPath = `pr-${versionOrPr}${targetPath}`;
                }
@@ -75,7 +93,7 @@ export class Contents {
 
       let status = fetchedResponse.status;
       if (status >= 400 && request) {
-         if (status == 400) {
+         if (status === 400) {
             status = 404;
          }
          return await this.serveError(request, env, fallback, status);
@@ -109,7 +127,15 @@ export class Contents {
       return response;
    }
 
-   public async serveError(request: Request, env: Environment, fallback: FallbackHandler, statusCode: number, status?: string | undefined, message?: string | undefined | null, headers?: HeadersInit): Promise<Response> {
+   public async serveError(
+      request: Request,
+      env: Environment,
+      fallback: FallbackHandler,
+      statusCode: number,
+      status?: string | undefined,
+      _message?: string | undefined | null,
+      headers?: HeadersInit,
+   ): Promise<Response> {
       const latest = await this.releases.latest(env);
       const url = this._urlFor(env, `/${statusCode}.html`, latest);
 
@@ -120,7 +146,13 @@ export class Contents {
       });
 
       if (fetchedResponse.status >= 400) {
-         return await fallback.respondWithError(request, statusCode, status, `Cannot resolve default ${statusCode} error page, using default handler.`, headers);
+         return await fallback.respondWithError(
+            request,
+            statusCode,
+            status,
+            `Cannot resolve default ${statusCode} error page, using default handler.`,
+            headers,
+         );
       }
 
       const response = new Response(fetchedResponse.body, {
@@ -142,7 +174,9 @@ export class Contents {
 
    private _urlFor(env: Environment, path: string, versionOrPr: SemVer | number): URL {
       const segment = typeof versionOrPr === 'number' ? `pr-${versionOrPr}` : `v${versionOrPr}`;
-      return new URL(`https://raw.githubusercontent.com/${env.GITHUB_ORGANIZATION}/${env.GITHUB_REPOSITORY}/refs/tags/docs/${segment}${path}`);
+      return new URL(
+         `https://raw.githubusercontent.com/${env.GITHUB_ORGANIZATION}/${env.GITHUB_REPOSITORY}/refs/tags/docs/${segment}${path}`,
+      );
    }
 
    private _suffixUrlWith(url: URL | string, suffix: string): URL {

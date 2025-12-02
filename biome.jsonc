@@ -1,0 +1,54 @@
+{
+   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+   "root": true,
+   "files": {
+      "includes": [
+         "**/*",
+         "!.idea/**/*",
+         "!.npm/**/*",
+         "!.cache/**/*",
+         "!.wrangler/**/*",
+         "!var/**/*",
+         "!node_modules/**/*",
+         "!public/**/*",
+         "!dist/**/*"
+      ]
+   },
+   "formatter": {
+      "lineWidth": 120,
+      "attributePosition": "multiline",
+      "useEditorconfig": true,
+      "bracketSameLine": false
+   },
+   "css": {
+      "parser": {
+         "tailwindDirectives": true,
+         "cssModules": true
+      }
+   },
+   "javascript": {
+      "formatter": {
+         "quoteStyle": "single",
+         "jsxQuoteStyle": "double",
+         "semicolons": "always",
+         "quoteProperties": "asNeeded",
+         "attributePosition": "auto",
+         "trailingCommas": "all",
+         "operatorLinebreak": "after",
+         "arrowParentheses": "asNeeded"
+      }
+   },
+   "assist": {
+      "enabled": true
+   },
+   "vcs": {
+      "useIgnoreFile": true
+   },
+   "linter": {
+      "rules": {
+         "suspicious": {
+            "noExplicitAny": "off"
+         }
+      }
+   }
+}

@@ -1,4 +1,4 @@
-import { fetch, KVNamespace } from '@cloudflare/workers-types';
+import type { fetch, KVNamespace } from '@cloudflare/workers-types';
 
 export interface Environment {
    GITHUB_ACCESS_USER: string;

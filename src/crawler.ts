@@ -1,6 +1,6 @@
 import { Octokit } from '@octokit/rest';
-import { SemVer } from 'semver';
-import { Environment } from './common';
+import type { SemVer } from 'semver';
+import type { Environment } from './common';
 
 export type ContentConsumer = (env: Environment, path: string, version: SemVer) => Promise<void>;
 
@@ -10,27 +10,25 @@ export class Crawler {
          auth: env.GITHUB_ACCESS_TOKEN,
       });
       console.debug(`Crawling of ${version}...`);
-      for await (const response of octokit.paginate.iterator('GET /repos/{owner}/{repo}/git/trees/docs/v{version}?recursive=1', {
-         owner: env.GITHUB_ORGANIZATION,
-         repo: env.GITHUB_REPOSITORY,
-         version: version.toString(),
-         per_page: 100,
-      })) {
-         // @ts-ignore
-         for (const v of response.data.tree) {
-            // @ts-ignore
-            const type = v.type as string | undefined;
-            if (type !== 'blob') {
+      for await (const response of octokit.paginate.iterator(
+         'GET /repos/{owner}/{repo}/git/trees/docs/v{version}?recursive=1',
+         {
+            owner: env.GITHUB_ORGANIZATION,
+            repo: env.GITHUB_REPOSITORY,
+            version: version.toString(),
+            per_page: 100,
+         },
+      )) {
+         for (const v of (<any>response.data).tree) {
+            if (v.type !== 'blob') {
                continue;
             }
 
-            // @ts-ignore
-            const path = v.path as string | undefined;
-            if (!path) {
+            if (!v.path) {
                continue;
             }
 
-            await onEach(env, '/' + path, version);
+            await onEach(env, `/${v.path}`, version);
          }
       }
       console.log(`Crawling of ${version}... DONE!`);
