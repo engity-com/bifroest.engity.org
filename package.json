@@ -21,7 +21,7 @@
       "@octokit/rest": "^22.0.1",
       "mime-types": "^3.0.2",
       "octokit": "^5.0.5",
-      "semver": "^7.7.3",
+      "semver": "^7.7.4",
       "yaml": "^2.8.1"
    },
    "devDependencies": {
