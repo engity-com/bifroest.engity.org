@@ -29,7 +29,7 @@
       "@cloudflare/workers-types": "^5.20260814.1",
       "@types/mime-types": "^3.0.1",
       "@types/node": "^26.2.0",
-      "@types/semver": "^7.7.1",
+      "@types/semver": "^7.8.0",
       "npm-check-updates": "^23.0.2",
       "typescript": "^7.0.2",
       "vitest": "^4.1.10",
