@@ -32,7 +32,7 @@
       "@types/semver": "^7.8.0",
       "npm-check-updates": "^23.1.0",
       "typescript": "^7.0.2",
-      "vitest": "^4.1.11",
+      "vitest": "^5.0.0",
       "wrangler": "^4.129.0"
    }
 }
