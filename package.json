@@ -28,7 +28,7 @@
       "@biomejs/biome": "2.5.14",
       "@cloudflare/workers-types": "^5.20260911.1",
       "@types/mime-types": "^3.0.1",
-      "@types/node": "^26.5.1",
+      "@types/node": "^26.6.2",
       "@types/semver": "^7.8.0",
       "npm-check-updates": "^23.1.0",
       "typescript": "^7.0.2",
