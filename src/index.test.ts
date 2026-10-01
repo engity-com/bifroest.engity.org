@@ -22,7 +22,7 @@ const testKv: KVNamespace = {
    },
 };
 
-const testCtx: ExecutionContext = {
+const testCtx = {
    passThroughOnException(): void {
       throw `Not implemented!`;
    },
@@ -30,7 +30,7 @@ const testCtx: ExecutionContext = {
       throw `Not implemented!`;
    },
    props: undefined,
-};
+} as unknown as ExecutionContext;
 
 const testEnvironment: Environment = {
    GITHUB_ACCESS_USER: 'testGithubAccessUser',
@@ -47,15 +47,16 @@ const testEnvironment: Environment = {
 
 describe('handler', () => {
    describe('fetch()', () => {
-      it('should handle GET /latest/ and redirect to /', async () => {
+      it('should handle GET /latest/ and redirect temporarily to /', async () => {
          const result = await handler.fetch(
             new Request('http://falcon/latest/', { method: 'GET' }),
             testEnvironment,
             testCtx,
             AppCachingStrategy.byPass,
          );
-         expect(result.status).toBe(301);
+         expect(result.status).toBe(307);
          expect(result.headers.get('Location')).toBe('http://falcon/');
+         expect(result.headers.get('Cache-Control')).toBe('public, max-age=300');
       });
    });
 });

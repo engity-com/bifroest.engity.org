@@ -70,7 +70,7 @@ export class App implements ExportedHandler<Environment> {
    }
 
    private async preCache(env: Environment, ctx: ExecutionContext): Promise<void> {
-      const latest = await this.releases.update(env);
+      const { latest } = await this.releases.update(env);
       await this.crawler.crawl(env, latest, async (env, path) => {
          const url = new URL(`https://bifroest.engity.org${path}`);
          const request = new Request(url, {

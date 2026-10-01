@@ -8,9 +8,10 @@ export class Versions {
    public constructor(private readonly releases: Releases) {}
 
    public async serve(_: Request | undefined, env: Environment): Promise<Response> {
-      const latest = await this.releases.latest(env);
+      const snapshot = await this.releases.snapshot(env);
+      const latest = snapshot.latest;
       const latestName = latest.toString();
-      const all = sort(await this.releases.all(env)).reverse();
+      const all = sort(snapshot.all).reverse();
 
       const payload = all.map(v => {
          const name = v.toString();
@@ -23,7 +24,7 @@ export class Versions {
          };
       });
       const response = new Response(JSON.stringify(payload));
-      response.headers.set('Cache-Control', `public, max-age=${ttl}, public`);
+      response.headers.set('Cache-Control', `public, max-age=${ttl}`);
       response.headers.set('Content-Type', 'application/json');
 
       return response;

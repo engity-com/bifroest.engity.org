@@ -37,7 +37,7 @@ export class Router {
       },
       {
          regexp: /^\/latest(|\/.*)$/,
-         handler: async (request, _, match) => await this.redirect(request, match[1], 301),
+         handler: async (request, _, match) => await this.redirect(request, match[1], 307),
       },
    ];
 
@@ -83,7 +83,7 @@ export class Router {
       rawVersion: string,
       restPath: string,
    ): Promise<Response> {
-      const version = semver.coerce(rawVersion, { includePrerelease: true });
+      const version = semver.parse(rawVersion);
       if (!version) {
          const url = new URL(request.url);
          return await this.onDefault(request, env, url.pathname);
@@ -99,7 +99,13 @@ export class Router {
    public async redirect(request: Request, newPath: string, status: number): Promise<Response> {
       const url = new URL(request.url);
       url.pathname = newPath;
-      return Response.redirect(url.toString(), status);
+      return new Response(null, {
+         status,
+         headers: {
+            Location: url.toString(),
+            ...(status === 307 ? { 'Cache-Control': 'public, max-age=300' } : {}),
+         },
+      });
    }
 
    public async serveAsset(request: Request, env: Environment): Promise<Response> {

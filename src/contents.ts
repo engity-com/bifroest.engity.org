@@ -12,6 +12,7 @@ import type { Releases } from './releases';
 
 const ttlPreReleases = oneMinuteInSeconds * 15;
 const ttlReleases = oneHourInSeconds * 12;
+const ttlLatest = oneMinuteInSeconds * 5;
 const ttlUnique = oneYearInSeconds;
 const ttlNotFound = oneMinuteInSeconds * 5;
 
@@ -38,13 +39,9 @@ export class Contents {
       path: string,
       versionOrPr?: SemVer | number,
    ): Promise<Response> {
-      const latest = await this.releases.latest(env);
-
-      if (request && versionOrPr && versionOrPr === latest) {
-         return await fallback.redirect(request, path, 307);
-      }
+      const isLatest = !versionOrPr;
       if (!versionOrPr) {
-         versionOrPr = latest;
+         versionOrPr = await this.releases.latest(env);
       }
 
       const url = this._urlFor(env, path, versionOrPr);
@@ -58,7 +55,7 @@ export class Contents {
          if (preRelease) {
             return ttlPreReleases;
          }
-         return ttlReleases;
+         return isLatest ? ttlLatest : ttlReleases;
       };
 
       let fetchedResponse = await fetch(url, {
@@ -117,7 +114,7 @@ export class Contents {
       } else {
          response.headers.set('X-Version', `${versionOrPr}`);
       }
-      response.headers.set('Cache-Control', `public, max-age=${ttl()}, public`);
+      response.headers.set('Cache-Control', `public, max-age=${ttl()}`);
       const mimeType = mime.lookup(filename);
       if (mimeType) {
          response.headers.set('Content-Type', mimeType.startsWith('text/') ? `${mimeType};charset=utf8` : mimeType);
