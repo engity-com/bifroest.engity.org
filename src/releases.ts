@@ -1,27 +1,72 @@
 import { Octokit } from '@octokit/rest';
 import type { SemVer } from 'semver';
 import semver from 'semver/preload';
-import { type Environment, oneMinuteInSeconds } from './common';
+import { type Environment, oneHourInSeconds, oneMinuteInSeconds } from './common';
 
 const docsRefPrefix = 'refs/tags/docs/';
 const snapshotKey = 'releases-verified';
+const maxSnapshotAge = 3 * oneHourInSeconds * 1000;
+const refreshInterval = oneMinuteInSeconds * 1000;
 
 export interface ReleaseSnapshot {
    latest: SemVer;
    all: Array<SemVer>;
 }
 
+export class LatestUnavailableError extends Error {}
+
 export class Releases {
+   private verifying?: Promise<ReleaseSnapshot>;
+   private recentlyVerified?: { snapshot: ReleaseSnapshot; until: number };
+   private verificationFailure?: { error: LatestUnavailableError; retryAfter: number };
+   private generation = 0;
+
    public async snapshot(env: Environment): Promise<ReleaseSnapshot> {
       const plain = await env.KV.get(snapshotKey, { cacheTtl: oneMinuteInSeconds });
-      if (!plain) {
-         return this.update(env);
+      if (plain) {
+         const saved = JSON.parse(plain) as { latest: string; all: Array<string>; verifiedAt?: number };
+         if (
+            typeof saved.verifiedAt === 'number' &&
+            Date.now() - saved.verifiedAt < maxSnapshotAge &&
+            saved.verifiedAt <= Date.now()
+         ) {
+            return {
+               latest: this._toSemver(saved.latest),
+               all: saved.all.map(v => this._toSemver(v)),
+            };
+         }
       }
-      const saved = JSON.parse(plain) as { latest: string; all: Array<string> };
-      return {
-         latest: this._toSemver(saved.latest),
-         all: saved.all.map(v => this._toSemver(v)),
-      };
+
+      // Old snapshots without verifiedAt and expired snapshots must be checked again.
+      // Request handlers never write KV; only the scheduled update does.
+      if (this.recentlyVerified && this.recentlyVerified.until > Date.now()) {
+         return this.recentlyVerified.snapshot;
+      }
+      if (this.verificationFailure && this.verificationFailure.retryAfter > Date.now()) {
+         throw this.verificationFailure.error;
+      }
+      const generation = this.generation;
+      this.verifying ??= this.verify(env)
+         .then(snapshot => {
+            if (generation !== this.generation && this.recentlyVerified) {
+               return this.recentlyVerified.snapshot;
+            }
+            this.verificationFailure = undefined;
+            this.recentlyVerified = { snapshot, until: Date.now() + refreshInterval };
+            return snapshot;
+         })
+         .catch(cause => {
+            if (generation !== this.generation && this.recentlyVerified) {
+               return this.recentlyVerified.snapshot;
+            }
+            const error = new LatestUnavailableError('Latest release could not be verified.', { cause });
+            this.verificationFailure = { error, retryAfter: Date.now() + refreshInterval };
+            throw error;
+         })
+         .finally(() => {
+            this.verifying = undefined;
+         });
+      return this.verifying;
    }
 
    public async latest(env: Environment): Promise<SemVer> {
@@ -37,6 +82,22 @@ export class Releases {
    }
 
    public async update(env: Environment): Promise<ReleaseSnapshot> {
+      const snapshot = await this.verify(env);
+      await env.KV.put(
+         snapshotKey,
+         JSON.stringify({
+            latest: snapshot.latest.version,
+            all: snapshot.all.map(v => v.version),
+            verifiedAt: Date.now(),
+         }),
+      );
+      this.generation++;
+      this.recentlyVerified = { snapshot, until: Date.now() + refreshInterval };
+      this.verificationFailure = undefined;
+      return snapshot;
+   }
+
+   private async verify(env: Environment): Promise<ReleaseSnapshot> {
       const octokit = new Octokit({ auth: env.GITHUB_ACCESS_TOKEN });
       const release = (
          await octokit.request('GET /repos/{owner}/{repo}/releases/latest', {
@@ -92,8 +153,6 @@ export class Releases {
       await homepage.body?.cancel();
 
       const sorted = semver.rsort(all.map(v => v.version));
-      // This is the only write: failed verification never replaces the last good snapshot.
-      await env.KV.put(snapshotKey, JSON.stringify({ latest: version.version, all: sorted }));
       return { latest: version, all: sorted.map(v => this._toSemver(v)) };
    }
 
