@@ -8,7 +8,7 @@ import {
    oneMinuteInSeconds,
    oneYearInSeconds,
 } from './common';
-import type { Releases } from './releases';
+import { LatestUnavailableError, type Releases } from './releases';
 
 const ttlPreReleases = oneMinuteInSeconds * 15;
 const ttlReleases = oneHourInSeconds * 12;
@@ -49,13 +49,16 @@ export class Contents {
          typeof versionOrPr === 'number' || (versionOrPr?.prerelease && versionOrPr.prerelease.length > 0);
       let filename = basename(url.pathname);
       const ttl = () => {
+         if (isLatest) {
+            return ttlLatest;
+         }
          if (uniqueFilename.exec(filename)) {
             return ttlUnique;
          }
          if (preRelease) {
             return ttlPreReleases;
          }
-         return isLatest ? ttlLatest : ttlReleases;
+         return ttlReleases;
       };
 
       let fetchedResponse = await fetch(url, {
@@ -133,7 +136,15 @@ export class Contents {
       _message?: string | undefined | null,
       headers?: HeadersInit,
    ): Promise<Response> {
-      const latest = await this.releases.latest(env);
+      let latest: SemVer;
+      try {
+         latest = await this.releases.latest(env);
+      } catch (error) {
+         if (!(error instanceof LatestUnavailableError)) {
+            throw error;
+         }
+         return fallback.respondWithError(request, statusCode, status, 'Cannot resolve default error page.', headers);
+      }
       const url = this._urlFor(env, `/${statusCode}.html`, latest);
 
       const fetchedResponse = await fetch(url, {

@@ -1,5 +1,6 @@
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { ExecutionContext, KVNamespace } from '@cloudflare/workers-types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { App, AppCachingStrategy } from './app';
 import type { Environment } from './common';
 import { Contents } from './contents';
 import { Releases } from './releases';
@@ -10,18 +11,23 @@ const github = vi.hoisted(() => ({
    release: { tag_name: 'v1.0.0', draft: false, prerelease: false, published_at: '2026-01-01' },
    refs: ['refs/tags/docs/v1.0.0', 'refs/tags/docs/v2.0.0'],
    failure: false,
+   requests: 0,
+   pauseRequest: undefined as Promise<void> | undefined,
 }));
 
 vi.mock('@octokit/rest', () => ({
    Octokit: class {
       request = async (route: string) => {
+         github.requests++;
          if (route !== 'GET /repos/{owner}/{repo}/releases/latest') {
             throw new Error(`Unexpected GitHub endpoint: ${route}`);
          }
+         const release = { ...github.release };
+         await github.pauseRequest;
          if (github.failure) {
             throw new Error('GitHub unavailable');
          }
-         return { data: github.release };
+         return { data: release };
       };
       paginate = {
          iterator: async function* () {
@@ -36,25 +42,32 @@ vi.mock('@octokit/rest', () => ({
 
 describe('GitHub latest release', () => {
    const values = new Map<string, string>();
+   let staleRead = false;
+   const put = vi.fn(async (key: string, value: string) => {
+      values.set(key, value);
+   });
    const env = {
       KV: {
-         get: async (key: string) => values.get(key) ?? null,
-         put: async (key: string, value: string) => {
-            values.set(key, value);
-         },
+         get: async (key: string) => (staleRead ? null : (values.get(key) ?? null)),
+         put,
       } as unknown as KVNamespace,
       GITHUB_ORGANIZATION: 'example',
       GITHUB_REPOSITORY: 'bifroest',
       GITHUB_ACCESS_USER: 'user',
       GITHUB_ACCESS_TOKEN: 'token',
    } as Environment;
-   const releases = new Releases();
+   let releases: Releases;
 
    beforeEach(() => {
+      releases = new Releases();
       values.clear();
+      staleRead = false;
+      put.mockClear();
       github.release = { tag_name: 'v1.0.0', draft: false, prerelease: false, published_at: '2026-01-01' };
       github.refs = ['refs/tags/docs/v1.0.0', 'refs/tags/docs/v2.0.0'];
       github.failure = false;
+      github.requests = 0;
+      github.pauseRequest = undefined;
       vi.stubGlobal(
          'fetch',
          vi.fn(async () => new Response('home', { status: 200 })),
@@ -140,6 +153,180 @@ describe('GitHub latest release', () => {
 
    it('fails closed without a verified snapshot when the GitHub API is unavailable', async () => {
       github.failure = true;
-      await expect(releases.latest(env)).rejects.toThrow('GitHub unavailable');
+      await expect(releases.latest(env)).rejects.toThrow('Latest release could not be verified');
+   });
+
+   it('coalesces simultaneous cold reads without writing to KV', async () => {
+      const latest = await Promise.all(Array.from({ length: 10 }, () => releases.latest(env)));
+      expect(latest.map(v => v.version)).toEqual(Array(10).fill('1.0.0'));
+      expect(github.requests).toBe(1);
+      expect(put).not.toHaveBeenCalled();
+      expect((await releases.latest(env)).version).toBe('1.0.0');
+      expect(github.requests).toBe(1);
+   });
+
+   it('backs off failed checks within an instance and retries after a minute', async () => {
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+         github.failure = true;
+         await expect(releases.latest(env)).rejects.toThrow('Latest release could not be verified');
+         await expect(releases.latest(env)).rejects.toThrow('Latest release could not be verified');
+         expect(github.requests).toBe(1);
+
+         clock.mockReturnValue(now + 61_000);
+         github.failure = false;
+         expect((await releases.latest(env)).version).toBe('1.0.0');
+         expect(github.requests).toBe(2);
+         expect(put).not.toHaveBeenCalled();
+      } finally {
+         clock.mockRestore();
+      }
+   });
+
+   it('ignores a failed request verification completed after a successful cron update', async () => {
+      let unblock!: () => void;
+      github.pauseRequest = new Promise(resolve => {
+         unblock = resolve;
+      });
+      const pending = releases.latest(env);
+      await vi.waitFor(() => expect(github.requests).toBe(1));
+
+      github.pauseRequest = undefined;
+      await releases.update(env);
+      github.failure = true;
+      staleRead = true;
+      unblock();
+
+      expect((await pending).version).toBe('1.0.0');
+      expect((await releases.latest(env)).version).toBe('1.0.0');
+      expect(github.requests).toBe(2);
+   });
+
+   it('ignores an obsolete verification result after the cron selects a newer release', async () => {
+      let unblock!: () => void;
+      github.pauseRequest = new Promise(resolve => {
+         unblock = resolve;
+      });
+      const pending = releases.latest(env);
+      await vi.waitFor(() => expect(github.requests).toBe(1));
+
+      github.pauseRequest = undefined;
+      github.release.tag_name = 'v2.0.0';
+      await releases.update(env);
+      staleRead = true;
+      unblock();
+
+      expect((await pending).version).toBe('2.0.0');
+      expect((await releases.latest(env)).version).toBe('2.0.0');
+   });
+
+   it('keeps the latest alias short-lived even for content-hashed assets', async () => {
+      await releases.update(env);
+      const router = new Router(new Contents(releases), new Versions(releases));
+      const latestAsset = await router.handle(new Request('https://example.org/file.abcdef12.min.js'), env);
+      const versionedAsset = await router.handle(new Request('https://example.org/v1.0.0/file.abcdef12.min.js'), env);
+      expect(latestAsset.headers.get('Cache-Control')).toBe('public, max-age=300');
+      expect(versionedAsset.headers.get('Cache-Control')).toBe('public, max-age=31536000');
+   });
+
+   it('uses a recently verified snapshot during a GitHub outage', async () => {
+      await releases.update(env);
+      expect(JSON.parse(values.get('releases-verified') ?? '{}').verifiedAt).toBeTypeOf('number');
+      github.failure = true;
+      expect((await releases.latest(env)).version).toBe('1.0.0');
+   });
+
+   it('rechecks expired snapshots without KV writes and fails closed if GitHub is unavailable', async () => {
+      values.set(
+         'releases-verified',
+         JSON.stringify({
+            latest: '1.0.0',
+            all: ['1.0.0'],
+            verifiedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
+         }),
+      );
+      github.release.tag_name = 'v2.0.0';
+      expect((await releases.latest(env)).version).toBe('2.0.0');
+      expect(put).not.toHaveBeenCalled();
+
+      releases = new Releases();
+      github.failure = true;
+      await expect(releases.latest(env)).rejects.toThrow('Latest release could not be verified');
+      expect(values.get('releases-verified')).toContain('"latest":"1.0.0"');
+   });
+
+   it('returns an uncached 503 when an expired snapshot cannot be verified', async () => {
+      values.set(
+         'releases-verified',
+         JSON.stringify({
+            latest: '1.0.0',
+            all: ['1.0.0'],
+            verifiedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
+         }),
+      );
+      github.failure = true;
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+         const response = await new App().fetch(
+            new Request('https://example.org/'),
+            env,
+            {} as ExecutionContext,
+            AppCachingStrategy.byPass,
+         );
+         expect(response.status).toBe(503);
+         expect(response.headers.get('Cache-Control')).toBe('no-store');
+         expect(response.headers.get('Retry-After')).toBe('60');
+         expect(put).not.toHaveBeenCalled();
+      } finally {
+         log.mockRestore();
+      }
+   });
+
+   it('does not put verification failures into the HTTP cache', async () => {
+      github.failure = true;
+      const putResponse = vi.fn();
+      vi.stubGlobal('caches', {
+         open: async () => ({ match: async () => undefined, put: putResponse }),
+      });
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+         const response = await new App().fetch(new Request('https://example.org/'), env, {
+            waitUntil: vi.fn(),
+         } as unknown as ExecutionContext);
+         expect(response.status).toBe(503);
+         expect(response.headers.get('Cache-Control')).toBe('no-store');
+         expect(putResponse).not.toHaveBeenCalled();
+      } finally {
+         log.mockRestore();
+         vi.unstubAllGlobals();
+      }
+   });
+
+   it('keeps explicit version 404 responses independent of latest verification', async () => {
+      values.set(
+         'releases-verified',
+         JSON.stringify({ latest: '1.0.0', all: ['1.0.0'], verifiedAt: Date.now() - 3 * 60 * 60 * 1000 - 1 }),
+      );
+      vi.stubGlobal(
+         'fetch',
+         vi.fn(async () => new Response(null, { status: 404 })),
+      );
+      github.failure = true;
+      const response = await new App().fetch(
+         new Request('https://example.org/v1.0.0/missing/'),
+         env,
+         {} as ExecutionContext,
+         AppCachingStrategy.byPass,
+      );
+      expect(response.status).toBe(404);
+      expect(put).not.toHaveBeenCalled();
+   });
+
+   it('rechecks persisted snapshots without a verification timestamp', async () => {
+      values.set('releases-verified', JSON.stringify({ latest: '1.0.0', all: ['1.0.0'] }));
+      github.release.tag_name = 'v2.0.0';
+      expect((await releases.latest(env)).version).toBe('2.0.0');
+      expect(put).not.toHaveBeenCalled();
    });
 });

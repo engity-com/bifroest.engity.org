@@ -1,9 +1,9 @@
 import type { ExecutionContext, ExportedHandler } from '@cloudflare/workers-types';
 import { Cache } from './cache';
-import type { Environment } from './common';
+import { applyDefaultHeaders, type Environment } from './common';
 import { Contents } from './contents';
 import { Crawler } from './crawler';
-import { Releases } from './releases';
+import { LatestUnavailableError, Releases } from './releases';
 import { Router } from './router';
 import { Versions } from './versions';
 
@@ -39,7 +39,20 @@ export class App implements ExportedHandler<Environment> {
                `Method passThroughOnException${request.method} is not allowed.`,
             );
       }
-      return await this.fetchInternal(request, env, ctx, cachingStrategy);
+      try {
+         return await this.fetchInternal(request, env, ctx, cachingStrategy);
+      } catch (error) {
+         if (!(error instanceof LatestUnavailableError)) {
+            throw error;
+         }
+         console.error('Latest release verification failed.');
+         const response = new Response(null, {
+            status: 503,
+            headers: { 'Cache-Control': 'no-store', 'Retry-After': '60' },
+         });
+         applyDefaultHeaders(response);
+         return response;
+      }
    }
 
    public async scheduled(_: ScheduledController, env: Environment, ctx: ExecutionContext): Promise<void> {
