@@ -3,6 +3,7 @@ import { Cache } from './cache';
 import { applyDefaultHeaders, type Environment } from './common';
 import { Contents } from './contents';
 import { Crawler } from './crawler';
+import { ReleaseMetadata } from './release-metadata';
 import { LatestUnavailableError, Releases } from './releases';
 import { Router } from './router';
 import { Versions } from './versions';
@@ -18,7 +19,8 @@ export class App implements ExportedHandler<Environment> {
    private readonly releases = new Releases();
    private readonly contents = new Contents(this.releases);
    private readonly versions = new Versions(this.releases);
-   private readonly router = new Router(this.contents, this.versions);
+   private readonly releaseMetadata = new ReleaseMetadata(this.releases);
+   private readonly router = new Router(this.contents, this.versions, this.releaseMetadata);
    private readonly crawler = new Crawler();
 
    public async fetch(

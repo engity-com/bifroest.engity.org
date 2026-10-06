@@ -2,6 +2,7 @@ import type { SemVer } from 'semver';
 import semver from 'semver/preload';
 import type { Environment } from './common';
 import type { Contents } from './contents';
+import type { ReleaseMetadata } from './release-metadata';
 import type { Versions } from './versions';
 
 interface Rule {
@@ -12,8 +13,23 @@ interface Rule {
 export class Router {
    private readonly _rules: Array<Rule> = [
       {
-         regexp: /^\/versions\.json$/,
-         handler: async (request, env) => await this.onVersions(request, env),
+         regexp: /^\/versions(?:-v1)?\.json$/,
+         handler: async (request, env) => await this.versions.serve(request, env, 'v1'),
+      },
+      {
+         regexp: /^\/versions-v2\.json$/,
+         handler: async (request, env) => await this.versions.serve(request, env, 'v2'),
+      },
+      {
+         regexp: /^\/release\.json$/,
+         handler: async (_, env) => await this.releaseMetadata.serve(env),
+      },
+      {
+         regexp: /^\/(v\d+\.\d+\.\d+[^/]*)\/release\.json$/,
+         handler: async (_, env, match) => {
+            const version = semver.parse(match[1]);
+            return version ? this.releaseMetadata.serve(env, version) : new Response(null, { status: 404 });
+         },
       },
       {
          regexp: /^\/(?:robots\.txt|favicon\.ico)$/,
@@ -44,14 +60,11 @@ export class Router {
    public constructor(
       private readonly contents: Contents,
       private readonly versions: Versions,
+      private readonly releaseMetadata: ReleaseMetadata,
    ) {}
 
    private async onDefault(request: Request, env: Environment, path: string, versionOrPr?: SemVer | number) {
       return await this.contents.serve(request, env, this, path, versionOrPr);
-   }
-
-   private async onVersions(request: Request, env: Environment) {
-      return await this.versions.serve(request, env);
    }
 
    public async handle(request: Request, env: Environment): Promise<Response> {
