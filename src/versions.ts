@@ -20,7 +20,7 @@ export class Versions {
          if (format === 'v2') {
             return {
                tag: `v${name}`,
-               title: isLatest ? `Latest (${name})` : name,
+               title: name,
                path: isLatest ? '/' : `/v${name}/`,
                ...(isLatest ? { aliases: ['/latest/', `/v${name}/`], latest: true } : {}),
                ...(v.prerelease.length > 0 ? { prerelease: true } : {}),
@@ -28,7 +28,7 @@ export class Versions {
          }
          return {
             version: isLatest ? '..' : `v${name}`,
-            title: isLatest ? `Latest (${name})` : name,
+            title: name,
             aliases: isLatest ? ['latest'] : [],
             latest: isLatest ? true : undefined,
          };
