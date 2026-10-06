@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, AppCachingStrategy } from './app';
 import type { Environment } from './common';
 import { Contents } from './contents';
+import { ReleaseMetadata } from './release-metadata';
 import { Releases } from './releases';
 import { Router } from './router';
 import { Versions } from './versions';
@@ -76,7 +77,7 @@ describe('GitHub latest release', () => {
 
    it("uses GitHub's manually selected older stable release, not the highest docs version", async () => {
       expect((await releases.update(env)).latest.version).toBe('1.0.0');
-      const router = new Router(new Contents(releases), new Versions(releases));
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
       const home = await router.handle(new Request('https://example.org/'), env);
       expect(home.headers.get('X-Version')).toBe('1.0.0');
       expect(home.headers.get('Cache-Control')).toBe('public, max-age=300');
@@ -94,17 +95,134 @@ describe('GitHub latest release', () => {
    it.each(['alpha1', 'beta1'])('serves explicit %s docs without assigning the latest alias', async suffix => {
       github.refs.push(`refs/tags/docs/v2.0.0-${suffix}`);
       await releases.update(env);
-      const router = new Router(new Contents(releases), new Versions(releases));
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
       const response = await router.handle(new Request(`https://example.org/v2.0.0-${suffix}/`), env);
       expect(response.headers.get('X-Version')).toBe(`2.0.0-${suffix}`);
-      const payload = (await (
-         await router.handle(new Request('https://example.org/versions.json'), env)
-      ).json()) as Array<{
+      const v1 = (await (await router.handle(new Request('https://example.org/versions.json'), env)).json()) as Array<{
          title: string;
          aliases: Array<string>;
       }>;
-      expect(payload.find(v => v.title === `2.0.0-${suffix}`)?.aliases).toEqual([]);
-      expect(payload.find(v => v.aliases.includes('latest'))?.title).toBe('Latest (1.0.0)');
+      expect(v1.map(v => v.title)).toEqual(['Latest (1.0.0)', '2.0.0']);
+      const v2 = (await (
+         await router.handle(new Request('https://example.org/versions-v2.json'), env)
+      ).json()) as Array<{
+         tag: string;
+         aliases?: Array<string>;
+      }>;
+      expect(v2.find(v => v.tag === `v2.0.0-${suffix}`)?.aliases).toBeUndefined();
+   });
+
+   it('keeps v1 compatible and uses paths and tags rather than list position in v2', async () => {
+      github.refs = ['v1.0.0-beta1', 'v0.7.7', 'v0.7.6'].map(v => `refs/tags/docs/${v}`);
+      github.release.tag_name = 'v0.7.7';
+      await releases.update(env);
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
+
+      const v1 = await (await router.handle(new Request('https://example.org/versions.json'), env)).json();
+      const v1Alias = await (await router.handle(new Request('https://example.org/versions-v1.json'), env)).json();
+      expect(v1Alias).toEqual(v1);
+      expect(v1).toEqual([{ version: '..', title: 'Latest (0.7.7)', aliases: ['latest'], latest: true }]);
+
+      const v2 = await (await router.handle(new Request('https://example.org/versions-v2.json'), env)).json();
+      expect(v2).toEqual([
+         { tag: 'v1.0.0-beta1', title: '1.0.0-beta1', path: '/v1.0.0-beta1/', prerelease: true },
+         {
+            tag: 'v0.7.7',
+            title: 'Latest (0.7.7)',
+            path: '/',
+            aliases: ['/latest/', '/v0.7.7/'],
+            latest: true,
+         },
+      ]);
+      expect(
+         (await router.handle(new Request('https://example.org/v1.0.0-beta1/'), env)).headers.get('X-Version'),
+      ).toBe('1.0.0-beta1');
+   });
+
+   it('limits patches, minors and majors while keeping latest and one unfinished prerelease', async () => {
+      github.refs = [
+         'v0.7.6',
+         'v0.7.7',
+         'v1.0.0',
+         'v2.1.0',
+         'v2.2.0',
+         'v2.2.1',
+         'v2.3.0',
+         'v2.4.0',
+         'v3.0.0',
+         'v4.0.0',
+         'v5.0.0-beta1',
+         'v5.0.0-beta2',
+      ].map(v => `refs/tags/docs/${v}`);
+      github.release.tag_name = 'v0.7.7';
+      await releases.update(env);
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
+
+      const v1 = (await (
+         await router.handle(new Request('https://example.org/versions-v1.json'), env)
+      ).json()) as Array<{
+         version: string;
+      }>;
+      expect(v1.map(v => v.version)).toEqual(['..', 'v4.0.0', 'v3.0.0', 'v2.4.0', 'v2.3.0', 'v2.2.1']);
+
+      const v2 = (await (
+         await router.handle(new Request('https://example.org/versions-v2.json'), env)
+      ).json()) as Array<{
+         tag: string;
+      }>;
+      expect(v2.map(v => v.tag)).toEqual(['v5.0.0-beta2', 'v4.0.0', 'v3.0.0', 'v2.4.0', 'v2.3.0', 'v2.2.1', 'v0.7.7']);
+      expect((await router.handle(new Request('https://example.org/v0.7.6/'), env)).status).toBe(200);
+      expect(await (await router.handle(new Request('https://example.org/v2.1.0/release.json'), env)).json()).toEqual({
+         previous: 'v1.0.0',
+         isLatest: false,
+         previousMajorMinor: 'v1.0',
+      });
+
+      github.refs.push('refs/tags/docs/v5.0.0');
+      await releases.update(env);
+      const afterRelease = (await (
+         await router.handle(new Request('https://example.org/versions-v2.json'), env)
+      ).json()) as Array<{
+         tag: string;
+      }>;
+      expect(afterRelease.map(v => v.tag)).toEqual(['v5.0.0', 'v4.0.0', 'v3.0.0', 'v0.7.7']);
+   });
+
+   it('provides stable predecessors independent of dropdown filtering and refreshes isLatest', async () => {
+      github.refs = ['v0.7.6', 'v0.7.7', 'v1.0.0-beta1', 'v1.0.0'].map(v => `refs/tags/docs/${v}`);
+      github.release.tag_name = 'v0.7.7';
+      await releases.update(env);
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
+
+      const beta = await router.handle(new Request('https://example.org/v1.0.0-beta1/release.json'), env);
+      expect(await beta.json()).toEqual({ previous: 'v0.7.7', isLatest: false, previousMajorMinor: 'v0.7' });
+      expect(beta.headers.get('Cache-Control')).toBe('public, max-age=300');
+      expect(beta.headers.get('Content-Type')).toBe('application/json');
+      const current = await router.handle(new Request('https://example.org/release.json'), env);
+      expect(await current.json()).toEqual({ previous: 'v0.7.6', isLatest: true });
+      expect(await (await router.handle(new Request('https://example.org/v0.7.6/release.json'), env)).json()).toEqual({
+         isLatest: false,
+      });
+      expect(await (await router.handle(new Request('https://example.org/v0.7.7/release.json'), env)).json()).toEqual({
+         previous: 'v0.7.6',
+         isLatest: true,
+      });
+      expect((await router.handle(new Request('https://example.org/v9.0.0/release.json'), env)).status).toBe(404);
+
+      github.release.tag_name = 'v1.0.0';
+      await releases.update(env);
+      expect(await (await router.handle(new Request('https://example.org/release.json'), env)).json()).toEqual({
+         previous: 'v0.7.7',
+         isLatest: true,
+         previousMajorMinor: 'v0.7',
+      });
+      expect(await (await router.handle(new Request('https://example.org/v0.7.7/release.json'), env)).json()).toEqual({
+         previous: 'v0.7.6',
+         isLatest: false,
+      });
+      const alias = await router.handle(new Request('https://example.org/latest/release.json'), env);
+      expect(alias.status).toBe(307);
+      expect(alias.headers.get('Location')).toBe('https://example.org/release.json');
    });
 
    it.each(['v2.0.0-alpha1', 'v2.0.0-beta1'])(
@@ -223,7 +341,7 @@ describe('GitHub latest release', () => {
 
    it('keeps the latest alias short-lived even for content-hashed assets', async () => {
       await releases.update(env);
-      const router = new Router(new Contents(releases), new Versions(releases));
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
       const latestAsset = await router.handle(new Request('https://example.org/file.abcdef12.min.js'), env);
       const versionedAsset = await router.handle(new Request('https://example.org/v1.0.0/file.abcdef12.min.js'), env);
       expect(latestAsset.headers.get('Cache-Control')).toBe('public, max-age=300');
