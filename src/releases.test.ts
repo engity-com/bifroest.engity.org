@@ -175,6 +175,7 @@ describe('GitHub latest release', () => {
       expect(await (await router.handle(new Request('https://example.org/v2.1.0/release.json'), env)).json()).toEqual({
          previous: 'v1.0.0',
          isLatest: false,
+         latest: { title: 'Latest (0.7.7)', path: '/' },
          previousMajorMinor: 'v1.0',
       });
 
@@ -195,17 +196,28 @@ describe('GitHub latest release', () => {
       const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
 
       const beta = await router.handle(new Request('https://example.org/v1.0.0-beta1/release.json'), env);
-      expect(await beta.json()).toEqual({ previous: 'v0.7.7', isLatest: false, previousMajorMinor: 'v0.7' });
+      expect(await beta.json()).toEqual({
+         previous: 'v0.7.7',
+         isLatest: false,
+         latest: { title: 'Latest (0.7.7)', path: '/' },
+         previousMajorMinor: 'v0.7',
+      });
       expect(beta.headers.get('Cache-Control')).toBe('public, max-age=300');
       expect(beta.headers.get('Content-Type')).toBe('application/json');
       const current = await router.handle(new Request('https://example.org/release.json'), env);
-      expect(await current.json()).toEqual({ previous: 'v0.7.6', isLatest: true });
+      expect(await current.json()).toEqual({
+         previous: 'v0.7.6',
+         isLatest: true,
+         latest: { title: 'Latest (0.7.7)', path: '/' },
+      });
       expect(await (await router.handle(new Request('https://example.org/v0.7.6/release.json'), env)).json()).toEqual({
          isLatest: false,
+         latest: { title: 'Latest (0.7.7)', path: '/' },
       });
       expect(await (await router.handle(new Request('https://example.org/v0.7.7/release.json'), env)).json()).toEqual({
          previous: 'v0.7.6',
          isLatest: true,
+         latest: { title: 'Latest (0.7.7)', path: '/' },
       });
       expect((await router.handle(new Request('https://example.org/v9.0.0/release.json'), env)).status).toBe(404);
 
@@ -214,11 +226,13 @@ describe('GitHub latest release', () => {
       expect(await (await router.handle(new Request('https://example.org/release.json'), env)).json()).toEqual({
          previous: 'v0.7.7',
          isLatest: true,
+         latest: { title: 'Latest (1.0.0)', path: '/' },
          previousMajorMinor: 'v0.7',
       });
       expect(await (await router.handle(new Request('https://example.org/v0.7.7/release.json'), env)).json()).toEqual({
          previous: 'v0.7.6',
          isLatest: false,
+         latest: { title: 'Latest (1.0.0)', path: '/' },
       });
       const alias = await router.handle(new Request('https://example.org/latest/release.json'), env);
       expect(alias.status).toBe(307);
