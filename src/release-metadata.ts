@@ -25,7 +25,8 @@ export class ReleaseMetadata {
          JSON.stringify({
             ...(previous ? { previous: `v${previous.version}` } : {}),
             isLatest: current.version === snapshot.latest.version,
-            latest: { title: `Latest (${snapshot.latest.version})`, path: '/' },
+            latest: { title: snapshot.latest.version, path: '/' },
+            ...(current.prerelease.length > 0 ? { prerelease: true } : {}),
             ...(previousMinor ? { previousMajorMinor: `v${previousMinor.major}.${previousMinor.minor}` } : {}),
          }),
       );
