@@ -239,6 +239,87 @@ describe('GitHub latest release', () => {
       expect(alias.headers.get('Location')).toBe('https://example.org/release.json');
    });
 
+   it('refreshes the snapshot once when a newly published version requests release metadata', async () => {
+      github.refs = ['refs/tags/docs/v1.0.0'];
+      await releases.update(env);
+      github.refs.push('refs/tags/docs/v2.0.0-beta2');
+      let unblock!: () => void;
+      github.pauseRequest = new Promise(resolve => {
+         unblock = resolve;
+      });
+
+      const router = new Router(new Contents(releases), new Versions(releases), new ReleaseMetadata(releases));
+      const requests = Array.from({ length: 5 }, () =>
+         router.handle(new Request('https://example.org/v2.0.0-beta2/release.json'), env),
+      );
+      await vi.waitFor(() => expect(github.requests).toBe(2));
+      unblock();
+
+      const responses = await Promise.all(requests);
+      for (const response of responses) {
+         expect(response.status).toBe(200);
+         expect(await response.json()).toEqual({
+            previous: 'v1.0.0',
+            isLatest: false,
+            latest: { title: 'Latest (1.0.0)', path: '/' },
+            previousMajorMinor: 'v1.0',
+         });
+      }
+      expect(github.requests).toBe(2);
+      expect(put).toHaveBeenCalledTimes(2);
+      expect(
+         await (await router.handle(new Request('https://example.org/versions-v2.json'), env)).json(),
+      ).toContainEqual({
+         tag: 'v2.0.0-beta2',
+         title: '2.0.0-beta2',
+         path: '/v2.0.0-beta2/',
+         prerelease: true,
+      });
+   });
+
+   it('does not cache missing version metadata or repeatedly verify an unknown tag', async () => {
+      await releases.update(env);
+      const putResponse = vi.fn();
+      vi.stubGlobal('caches', {
+         open: async () => ({ match: async () => undefined, put: putResponse }),
+      });
+      try {
+         const app = new App();
+         const request = new Request('https://example.org/v9.0.0/release.json');
+         const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+         const first = await app.fetch(request, env, ctx);
+         expect(first.status).toBe(404);
+         expect(first.headers.get('Cache-Control')).toBe('no-store');
+         expect(first.headers.get('Cloudflare-CDN-Cache-Control')).toBe('no-store');
+         expect(putResponse).not.toHaveBeenCalled();
+
+         const second = await app.fetch(request, env, ctx);
+         expect(second.status).toBe(404);
+         expect(github.requests).toBe(2);
+         expect(put).toHaveBeenCalledTimes(2);
+      } finally {
+         vi.unstubAllGlobals();
+      }
+   });
+
+   it('returns an uncached 503 while rechecking an unknown version fails', async () => {
+      await releases.update(env);
+      github.failure = true;
+      const app = new App();
+      const request = new Request('https://example.org/v2.0.0-beta2/release.json');
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+         const first = await app.fetch(request, env, {} as ExecutionContext, AppCachingStrategy.byPass);
+         const second = await app.fetch(request, env, {} as ExecutionContext, AppCachingStrategy.byPass);
+         expect(first.status).toBe(503);
+         expect(second.status).toBe(503);
+         expect(first.headers.get('Cache-Control')).toBe('no-store');
+         expect(github.requests).toBe(2);
+      } finally {
+         log.mockRestore();
+      }
+   });
+
    it.each(['v2.0.0-alpha1', 'v2.0.0-beta1'])(
       'rejects a prerelease tag %s even without a prerelease flag',
       async tag => {

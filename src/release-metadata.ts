@@ -6,10 +6,13 @@ export class ReleaseMetadata {
    public constructor(private readonly releases: Releases) {}
 
    public async serve(env: Environment, version?: SemVer): Promise<Response> {
-      const snapshot = await this.releases.snapshot(env);
+      const snapshot = version ? await this.releases.snapshotFor(env, version) : await this.releases.snapshot(env);
       const current = version ?? snapshot.latest;
       if (!snapshot.all.some(v => v.version === current.version)) {
-         return new Response(null, { status: 404, headers: { 'Cache-Control': 'public, max-age=300' } });
+         return new Response(null, {
+            status: 404,
+            headers: { 'Cache-Control': 'no-store', 'Cloudflare-CDN-Cache-Control': 'no-store' },
+         });
       }
 
       const stable = snapshot.all.filter(v => v.prerelease.length === 0).sort(rcompare);
