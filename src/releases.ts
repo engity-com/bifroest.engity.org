@@ -19,6 +19,9 @@ export class Releases {
    private verifying?: Promise<ReleaseSnapshot>;
    private recentlyVerified?: { snapshot: ReleaseSnapshot; until: number };
    private verificationFailure?: { error: LatestUnavailableError; retryAfter: number };
+   private refreshingMissing?: Promise<ReleaseSnapshot>;
+   private lastMissingRefreshAt = 0;
+   private missingRefreshFailure?: { error: LatestUnavailableError; retryAfter: number };
    private generation = 0;
 
    public async snapshot(env: Environment): Promise<ReleaseSnapshot> {
@@ -38,7 +41,6 @@ export class Releases {
       }
 
       // Old snapshots without verifiedAt and expired snapshots must be checked again.
-      // Request handlers never write KV; only the scheduled update does.
       if (this.recentlyVerified && this.recentlyVerified.until > Date.now()) {
          return this.recentlyVerified.snapshot;
       }
@@ -69,6 +71,41 @@ export class Releases {
       return this.verifying;
    }
 
+   public async snapshotFor(env: Environment, version: SemVer): Promise<ReleaseSnapshot> {
+      const snapshot = await this.snapshot(env);
+      if (snapshot.all.some(v => v.version === version.version)) {
+         return snapshot;
+      }
+      // KV reads can remain stale briefly after another request has published an updated snapshot.
+      if (
+         this.recentlyVerified &&
+         this.recentlyVerified.until > Date.now() &&
+         this.recentlyVerified.snapshot.all.some(v => v.version === version.version)
+      ) {
+         return this.recentlyVerified.snapshot;
+      }
+
+      if (!this.refreshingMissing) {
+         if (this.missingRefreshFailure && this.missingRefreshFailure.retryAfter > Date.now()) {
+            throw this.missingRefreshFailure.error;
+         }
+         if (this.lastMissingRefreshAt && Date.now() - this.lastMissingRefreshAt < refreshInterval) {
+            return snapshot;
+         }
+         this.lastMissingRefreshAt = Date.now();
+         this.refreshingMissing = this.update(env)
+            .catch(cause => {
+               const error = new LatestUnavailableError('Docs release could not be verified.', { cause });
+               this.missingRefreshFailure = { error, retryAfter: Date.now() + refreshInterval };
+               throw error;
+            })
+            .finally(() => {
+               this.refreshingMissing = undefined;
+            });
+      }
+      return this.refreshingMissing;
+   }
+
    public async latest(env: Environment): Promise<SemVer> {
       return (await this.snapshot(env)).latest;
    }
@@ -94,6 +131,7 @@ export class Releases {
       this.generation++;
       this.recentlyVerified = { snapshot, until: Date.now() + refreshInterval };
       this.verificationFailure = undefined;
+      this.missingRefreshFailure = undefined;
       return snapshot;
    }
 

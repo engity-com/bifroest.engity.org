@@ -29,7 +29,9 @@ export class Cache {
 
          response = await drain(fetchRequest, env);
 
-         ctx.waitUntil(cache.put(targetUrl, response.clone()));
+         if (response.headers.get('Cache-Control') !== 'no-store') {
+            ctx.waitUntil(cache.put(targetUrl, response.clone()));
+         }
 
          if (force) {
             console.info(`${fetchRequest.url} retrieved. (status: ${response.status})`);
