@@ -33,6 +33,6 @@
       "npm-check-updates": "^23.1.1",
       "typescript": "^7.0.2",
       "vitest": "^5.0.3",
-      "wrangler": "^4.141.0"
+      "wrangler": "^4.152.0"
    }
 }
